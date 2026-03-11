@@ -15,7 +15,7 @@ def render_sidebar() -> str:
         st.divider()
 
         # --- Métricas rápidas ---
-        market = get_latest_market_price("CC=F")
+        market = get_latest_market_price()
         trm_data = get_latest_trm()
         spot = get_usdcop_spot()
         balance = get_latest_balance()

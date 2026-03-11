@@ -39,7 +39,7 @@ def refresh_market_data() -> dict:
 
 def get_current_data() -> dict:
     """Retorna los datos más recientes disponibles."""
-    cacao = get_latest_market_price("CC=F")
+    cacao = get_latest_market_price()
     trm = get_latest_trm()
     spot = get_usdcop_spot()
     return {

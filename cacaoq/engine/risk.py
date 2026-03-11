@@ -15,7 +15,7 @@ def compute_risk() -> dict:
     inventory = get_active_inventory()
     positions = get_latest_positions()
     balance = get_latest_balance()
-    market = get_latest_market_price("CC=F")
+    market = get_latest_market_price()
     trm_data = get_latest_trm()
     pnl = get_latest_pnl()
 

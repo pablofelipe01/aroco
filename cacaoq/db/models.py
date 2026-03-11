@@ -190,12 +190,18 @@ def upsert_market_data(date: str, ticker: str, close_price: float,
     conn.close()
 
 
-def get_latest_market_price(ticker: str = "CC=F"):
+def get_latest_market_price(ticker: str = None):
     conn = get_connection()
-    row = conn.execute(
-        "SELECT * FROM market_data WHERE ticker=? ORDER BY date DESC LIMIT 1",
-        (ticker,)
-    ).fetchone()
+    if ticker:
+        row = conn.execute(
+            "SELECT * FROM market_data WHERE ticker=? ORDER BY date DESC LIMIT 1",
+            (ticker,)
+        ).fetchone()
+    else:
+        # Buscar el precio más reciente de cualquier contrato de cacao
+        row = conn.execute(
+            "SELECT * FROM market_data ORDER BY date DESC LIMIT 1"
+        ).fetchone()
     conn.close()
     return dict(row) if row else None
 
