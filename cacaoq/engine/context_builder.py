@@ -1,0 +1,147 @@
+"""CacaoQ — Construye el system prompt dinámico para Claude."""
+
+from engine.risk import compute_risk
+
+
+def build_system_prompt() -> str:
+    """Construye el system prompt con todos los datos actuales."""
+    risk = compute_risk()
+    phys = risk["physical"]
+    hedge = risk["hedge"]
+    pnl = risk["pnl"]
+    market = risk["market"]
+    balance = risk["balance"]
+    margin = risk["margin"]
+    collar = hedge.get("collar")
+
+    # --- Datos de mercado ---
+    market_section = "## Datos de Mercado Actuales\n"
+    if market["cacao_price_usd"]:
+        market_section += f"- Precio cacao ICE NY: **USD {market['cacao_price_usd']:,.2f}/ton**\n"
+    else:
+        market_section += "- Precio cacao: No disponible\n"
+    if market["trm"]:
+        market_section += f"- TRM (USD/COP): **{market['trm']:,.2f}**\n"
+    if market.get("max_safe_price_cop_kg"):
+        market_section += f"- Precio máximo seguro de compra: **COP {market['max_safe_price_cop_kg']:,.0f}/kg**\n"
+
+    # --- Inventario físico ---
+    inv_section = "## Inventario Físico\n"
+    inv_section += f"- Total: **{phys['total_tonnes']:.1f} toneladas**\n"
+    for status, tonnes in phys["by_status"].items():
+        inv_section += f"  - {status.capitalize()}: {tonnes:.1f} ton\n"
+    if phys["avg_purchase_price_cop_kg"] > 0:
+        inv_section += f"- Precio promedio de compra: **COP {phys['avg_purchase_price_cop_kg']:,.0f}/kg**\n"
+
+    # --- Posiciones del broker ---
+    pos_section = "## Posiciones del Broker (StoneX)\n"
+    if risk["positions"]:
+        for pos in risk["positions"]:
+            side = "LONG" if pos["long_qty"] > 0 else "SHORT"
+            qty = pos["long_qty"] or pos["short_qty"]
+            otype = pos["option_type"] or "FUTURE"
+            pos_section += (
+                f"- {qty} {otype} {side} | Strike: {pos['strike']} | "
+                f"Mes: {pos['contract_month']} | Settle: {pos['settle_price']} | "
+                f"Valor: USD {pos['market_value']:,.2f} ({pos['dr_cr']})\n"
+            )
+    else:
+        pos_section += "- Sin posiciones abiertas\n"
+
+    # --- Balance ---
+    bal_section = "## Balance de la Cuenta\n"
+    if balance:
+        bal_section += f"- Net Liquidating Value: **USD {balance.get('net_liquidating_value', 0):,.2f}**\n"
+        bal_section += f"- Total Equity: USD {balance.get('total_equity', 0):,.2f}\n"
+        bal_section += f"- Valor opciones neto: USD {balance.get('net_option_value', 0):,.2f}\n"
+        bal_section += f"- Margen inicial: USD {balance.get('initial_margin', 0):,.2f}\n"
+        bal_section += f"- Equity disponible: **USD {balance.get('excess_equity', 0):,.2f}**\n"
+        bal_section += f"- Varianza del mercado: USD {balance.get('market_variance', 0):,.2f}\n"
+    else:
+        bal_section += "- Sin datos de balance\n"
+
+    # --- Análisis de riesgo ---
+    risk_section = "## Análisis de Riesgo\n"
+    risk_section += f"- Toneladas cubiertas: **{hedge['covered_tonnes']:.1f} / {phys['total_tonnes']:.1f}** ({hedge['coverage_pct']}%)\n"
+    risk_section += f"- Toneladas descubiertas: **{hedge['uncovered_tonnes']:.1f}**\n"
+
+    if collar:
+        risk_section += f"\n### Collar\n"
+        risk_section += f"- Piso (PUT): **USD {collar['floor']:,.0f}/ton**\n"
+        risk_section += f"- Techo (CALL): **USD {collar['cap']:,.0f}/ton**\n"
+        risk_section += f"- Contratos: {collar['contracts']}\n"
+        risk_section += f"- Toneladas protegidas: {collar['tonnes']:.0f}\n"
+        risk_section += f"- Prima neta: USD {collar['net_premium']:.2f}/ton\n"
+
+    # --- P&L ---
+    pnl_section = "## P&L\n"
+    pnl_section += f"- P&L no realizado coberturas (opciones): **USD {pnl['unrealized_hedge_usd']:,.2f}**\n"
+    if pnl["unrealized_physical_cop"] != 0:
+        pnl_section += f"- P&L no realizado inventario físico: **COP {pnl['unrealized_physical_cop']:,.0f}**\n"
+    pnl_section += f"- P&L realizado MTD: USD {pnl['realized_mtd']:,.2f}\n"
+    pnl_section += f"- P&L realizado YTD: USD {pnl['realized_ytd']:,.2f}\n"
+
+    # --- Escenarios ---
+    scenario_section = ""
+    if risk["scenarios"]:
+        scenario_section = "## Escenarios de Precio\n"
+        scenario_section += "| Cambio | Precio | Collar P&L | Físico P&L | Neto |\n"
+        scenario_section += "|--------|--------|------------|------------|------|\n"
+        for s in risk["scenarios"]:
+            scenario_section += (
+                f"| {s['price_change_pct']:+d}% | USD {s['price_usd']:,.0f} | "
+                f"USD {s['collar_pnl_usd']:,.0f} | USD {s['physical_pnl_usd']:,.0f} | "
+                f"USD {s['net_pnl_usd']:,.0f} |\n"
+            )
+
+    # --- Capacidad de margen ---
+    margin_section = "## Capacidad de Margen\n"
+    margin_section += f"- Equity excedente: USD {margin['excess_equity']:,.2f}\n"
+    margin_section += f"- Contratos adicionales posibles: {margin['additional_contracts_possible']}\n"
+    margin_section += f"- Toneladas adicionales cubribles: {margin['additional_tonnes_possible']}\n"
+
+    # --- System prompt completo ---
+    system_prompt = f"""Eres el analista de riesgo de AROCO SAS, un exportador colombiano de cacao fino de aroma. Tu nombre es CacaoQ.
+
+## Reglas de comportamiento
+- Responde SIEMPRE en español
+- Sé específico y cuantitativo: usa números exactos de los datos proporcionados
+- Nunca des consejo financiero definitivo — presenta análisis y opciones
+- Si no tienes datos suficientes para responder algo, dilo claramente
+- Usa formato markdown para organizar tus respuestas
+- El mercado de referencia es ICE NY Cocoa (futuros y opciones)
+- Los precios del físico están en COP/kg, las coberturas en USD/tonelada
+- 1 contrato ICE Cocoa = 10 toneladas métricas
+
+## Contexto actual de AROCO SAS
+
+{market_section}
+{inv_section}
+{pos_section}
+{bal_section}
+{risk_section}
+{pnl_section}
+{scenario_section}
+{margin_section}
+
+## Notas importantes
+- El collar (PUT comprado + CALL vendido) protege contra caídas pero limita ganancias
+- La TRM afecta directamente el margen de exportación
+- El inventario físico no cubierto está expuesto al riesgo de precio
+- Monitorear el exceso de equity para posibles margin calls
+"""
+    return system_prompt
+
+
+def build_morning_analysis_prompt() -> str:
+    """Prompt predefinido para el análisis matutino."""
+    return """Por favor genera el análisis matutino completo de AROCO SAS. Incluye:
+
+1. **Resumen de posición**: Estado actual del inventario y coberturas
+2. **Mercado**: Movimiento del precio del cacao y su impacto en nuestra posición
+3. **Riesgo**: Análisis del collar, toneladas descubiertas, y margen disponible
+4. **TRM**: Impacto de la tasa de cambio en el negocio
+5. **Recomendaciones**: Puntos de atención y posibles acciones (sin ser consejo definitivo)
+6. **Escenarios**: Qué pasa si el mercado sube o baja 5-10%
+
+Sé conciso pero completo."""

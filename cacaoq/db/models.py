@@ -1,0 +1,321 @@
+"""CacaoQ — Funciones CRUD para todas las tablas."""
+
+from datetime import datetime
+from db.database import get_connection
+
+
+# ─── Physical Inventory ───────────────────────────────────────────────
+
+def insert_inventory(date: str, tonnes: float, price_cop_kg: float,
+                     supplier: str = None, region: str = None,
+                     status: str = "bodega", shipment_date: str = None,
+                     notes: str = None) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO physical_inventory
+           (date, tonnes, price_cop_kg, supplier, region, status, shipment_date, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (date, tonnes, price_cop_kg, supplier, region, status, shipment_date, notes)
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id
+
+
+def get_all_inventory():
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM physical_inventory ORDER BY date DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_active_inventory():
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM physical_inventory WHERE status NOT IN ('entregado') ORDER BY date DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_inventory_status(inventory_id: int, status: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE physical_inventory SET status=?, updated_at=? WHERE id=?",
+        (status, datetime.now().isoformat(), inventory_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_inventory(inventory_id: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM physical_inventory WHERE id=?", (inventory_id,))
+    conn.commit()
+    conn.close()
+
+
+# ─── Broker Positions ─────────────────────────────────────────────────
+
+def insert_position(statement_date: str, account: str, trade_date: str = None,
+                    card: str = None, long_qty: int = 0, short_qty: int = 0,
+                    option_type: str = None, contract_month: str = None,
+                    exchange: str = "ICE COCOA", strike: float = None,
+                    settle_price: float = None, market_value: float = None,
+                    dr_cr: str = None) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO broker_positions
+           (statement_date, account, trade_date, card, long_qty, short_qty,
+            option_type, contract_month, exchange, strike, settle_price, market_value, dr_cr)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (statement_date, account, trade_date, card, long_qty, short_qty,
+         option_type, contract_month, exchange, strike, settle_price, market_value, dr_cr)
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id
+
+
+def get_positions_by_date(statement_date: str):
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM broker_positions WHERE statement_date=? ORDER BY id",
+        (statement_date,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_latest_positions():
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT * FROM broker_positions
+           WHERE statement_date = (SELECT MAX(statement_date) FROM broker_positions)
+           ORDER BY id"""
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ─── Account Balance ──────────────────────────────────────────────────
+
+def insert_balance(statement_date: str, account: str, **kwargs) -> int:
+    fields = ["beginning_balance", "ending_balance", "total_equity",
+              "long_option_value", "short_option_value", "net_option_value",
+              "net_liquidating_value", "prior_net_liquidating_value",
+              "market_variance", "initial_margin", "maintenance_margin",
+              "excess_equity"]
+    values = {f: kwargs.get(f) for f in fields}
+    cols = ", ".join(["statement_date", "account"] + list(values.keys()))
+    placeholders = ", ".join(["?"] * (2 + len(values)))
+    params = [statement_date, account] + list(values.values())
+
+    conn = get_connection()
+    cur = conn.execute(
+        f"INSERT INTO account_balance ({cols}) VALUES ({placeholders})", params
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id
+
+
+def get_latest_balance():
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT * FROM account_balance
+           WHERE statement_date = (SELECT MAX(statement_date) FROM account_balance)
+           LIMIT 1"""
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+# ─── Processed Statements ────────────────────────────────────────────
+
+def insert_processed_statement(filename: str, statement_date: str,
+                                account: str, file_hash: str,
+                                num_positions: int) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT OR IGNORE INTO processed_statements
+           (filename, statement_date, account, file_hash, num_positions)
+           VALUES (?, ?, ?, ?, ?)""",
+        (filename, statement_date, account, file_hash, num_positions)
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id
+
+
+def is_statement_processed(file_hash: str) -> bool:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id FROM processed_statements WHERE file_hash=?", (file_hash,)
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
+def get_all_processed_statements():
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM processed_statements ORDER BY statement_date DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ─── Market Data ─────────────────────────────────────────────────────
+
+def upsert_market_data(date: str, ticker: str, close_price: float,
+                       open_price: float = None, high: float = None,
+                       low: float = None, volume: float = None):
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO market_data (date, ticker, close_price, open_price, high, low, volume)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(date, ticker) DO UPDATE SET
+             close_price=excluded.close_price, open_price=excluded.open_price,
+             high=excluded.high, low=excluded.low, volume=excluded.volume""",
+        (date, ticker, close_price, open_price, high, low, volume)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_latest_market_price(ticker: str = "CC=F"):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM market_data WHERE ticker=? ORDER BY date DESC LIMIT 1",
+        (ticker,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_market_history(ticker: str = "CC=F", days: int = 30):
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM market_data WHERE ticker=? ORDER BY date DESC LIMIT ?",
+        (ticker, days)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ─── TRM Data ────────────────────────────────────────────────────────
+
+def upsert_trm(date: str, trm: float):
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO trm_data (date, trm) VALUES (?, ?)
+           ON CONFLICT(date) DO UPDATE SET trm=excluded.trm""",
+        (date, trm)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_latest_trm():
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM trm_data ORDER BY date DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+# ─── Chat History ────────────────────────────────────────────────────
+
+def insert_chat_message(session_id: str, role: str, content: str):
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)",
+        (session_id, role, content)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_chat_history(session_id: str):
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT role, content, created_at FROM chat_history WHERE session_id=? ORDER BY id",
+        (session_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_all_sessions():
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT session_id, MIN(created_at) as started, COUNT(*) as messages
+           FROM chat_history GROUP BY session_id ORDER BY started DESC"""
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ─── Risk Snapshots ──────────────────────────────────────────────────
+
+def insert_risk_snapshot(**kwargs) -> int:
+    fields = ["date", "total_physical_tonnes", "covered_tonnes", "coverage_pct",
+              "cacao_price_usd", "trm", "net_liquidating_value",
+              "unrealized_pnl_physical", "unrealized_pnl_hedge",
+              "collar_floor", "collar_cap"]
+    values = {f: kwargs.get(f) for f in fields if kwargs.get(f) is not None}
+    cols = ", ".join(values.keys())
+    placeholders = ", ".join(["?"] * len(values))
+    conn = get_connection()
+    cur = conn.execute(
+        f"INSERT INTO risk_snapshots ({cols}) VALUES ({placeholders})",
+        list(values.values())
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id
+
+
+def get_latest_risk_snapshot():
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM risk_snapshots ORDER BY date DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+# ─── Broker P&L ──────────────────────────────────────────────────────
+
+def insert_broker_pnl(statement_date: str, account: str,
+                      realized_pnl_mtd: float, realized_pnl_ytd: float,
+                      currency: str = "USD") -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO broker_pnl
+           (statement_date, account, realized_pnl_mtd, realized_pnl_ytd, currency)
+           VALUES (?, ?, ?, ?, ?)""",
+        (statement_date, account, realized_pnl_mtd, realized_pnl_ytd, currency)
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id
+
+
+def get_latest_pnl():
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM broker_pnl ORDER BY statement_date DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None

@@ -1,0 +1,2 @@
+cd "/Volumes/Backup Drive/Mi_Trabajo/aroco-ll/cacaoq" &&
+  streamlit run app.py --server.headless true
