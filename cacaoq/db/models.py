@@ -51,6 +51,22 @@ def update_inventory_status(inventory_id: int, status: str):
     conn.close()
 
 
+def update_inventory(inventory_id: int, date: str, tonnes: float, price_cop_kg: float,
+                     supplier: str = None, region: str = None, status: str = "bodega",
+                     shipment_date: str = None, notes: str = None):
+    conn = get_connection()
+    conn.execute(
+        """UPDATE physical_inventory SET
+           date=?, tonnes=?, price_cop_kg=?, supplier=?, region=?,
+           status=?, shipment_date=?, notes=?, updated_at=?
+           WHERE id=?""",
+        (date, tonnes, price_cop_kg, supplier, region, status,
+         shipment_date, notes, datetime.now().isoformat(), inventory_id)
+    )
+    conn.commit()
+    conn.close()
+
+
 def delete_inventory(inventory_id: int):
     conn = get_connection()
     conn.execute("DELETE FROM physical_inventory WHERE id=?", (inventory_id,))

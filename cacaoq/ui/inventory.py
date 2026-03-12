@@ -2,11 +2,11 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 from config import REGIONES_CACAO, ESTADOS_INVENTARIO, PROVEEDORES_DEFAULT
 from db.models import (
     insert_inventory, get_all_inventory, get_active_inventory,
-    update_inventory_status, delete_inventory,
+    update_inventory, delete_inventory,
 )
 
 
@@ -68,51 +68,96 @@ def render_inventory():
     st.divider()
 
     # --- Tabla de inventario ---
-    st.subheader("Inventario Activo")
+    st.subheader("Inventario")
     all_inv = get_all_inventory()
     if not all_inv:
         st.info("No hay registros de inventario. Registra tu primera compra arriba.")
         return
 
-    df = pd.DataFrame(all_inv)
-    display_cols = ["id", "date", "tonnes", "price_cop_kg", "supplier",
-                    "region", "status", "shipment_date", "notes"]
-    display_cols = [c for c in display_cols if c in df.columns]
+    # Mostrar cada registro como card editable
+    for item in all_inv:
+        item_id = item["id"]
+        with st.expander(
+            f"**#{item_id}** | {item['date']} | {item['tonnes']} ton | "
+            f"{item['status'].upper()} | COP {item['price_cop_kg']:,.0f}/kg"
+            f"{' — ' + item['supplier'] if item.get('supplier') else ''}"
+        ):
+            with st.form(f"edit_{item_id}"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    edit_date = st.date_input(
+                        "Fecha",
+                        value=datetime.strptime(item["date"], "%Y-%m-%d").date(),
+                        key=f"date_{item_id}",
+                    )
+                    edit_tonnes = st.number_input(
+                        "Toneladas", min_value=0.1, max_value=1000.0,
+                        value=float(item["tonnes"]), step=0.5,
+                        key=f"ton_{item_id}",
+                    )
+                with col2:
+                    edit_price = st.number_input(
+                        "Precio (COP/kg)", min_value=1000, max_value=100000,
+                        value=int(item["price_cop_kg"]), step=500,
+                        key=f"price_{item_id}",
+                    )
+                    current_supplier = item.get("supplier") or ""
+                    supplier_options = [""] + PROVEEDORES_DEFAULT
+                    supplier_idx = supplier_options.index(current_supplier) if current_supplier in supplier_options else 0
+                    edit_supplier = st.selectbox(
+                        "Proveedor", supplier_options,
+                        index=supplier_idx, key=f"sup_{item_id}",
+                    )
+                with col3:
+                    current_region = item.get("region") or ""
+                    region_options = [""] + REGIONES_CACAO
+                    region_idx = region_options.index(current_region) if current_region in region_options else 0
+                    edit_region = st.selectbox(
+                        "Región", region_options,
+                        index=region_idx, key=f"reg_{item_id}",
+                    )
+                    status_idx = ESTADOS_INVENTARIO.index(item["status"]) if item["status"] in ESTADOS_INVENTARIO else 0
+                    edit_status = st.selectbox(
+                        "Estado", ESTADOS_INVENTARIO,
+                        index=status_idx, key=f"st_{item_id}",
+                    )
 
-    # Renombrar columnas para display
-    col_names = {
-        "id": "ID", "date": "Fecha", "tonnes": "Toneladas",
-        "price_cop_kg": "Precio COP/kg", "supplier": "Proveedor",
-        "region": "Región", "status": "Estado",
-        "shipment_date": "Embarque", "notes": "Notas",
-    }
-    st.dataframe(
-        df[display_cols].rename(columns=col_names),
-        use_container_width=True,
-        hide_index=True,
-    )
+                ship_val = None
+                if item.get("shipment_date"):
+                    try:
+                        ship_val = datetime.strptime(item["shipment_date"], "%Y-%m-%d").date()
+                    except ValueError:
+                        pass
+                edit_shipment = st.date_input(
+                    "Fecha embarque", value=ship_val, key=f"ship_{item_id}",
+                )
+                edit_notes = st.text_area(
+                    "Notas", value=item.get("notes") or "",
+                    max_chars=500, key=f"notes_{item_id}",
+                )
 
-    # --- Cambiar estado ---
-    st.subheader("Actualizar Estado")
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col1:
-        inv_id = st.number_input("ID del registro", min_value=1, step=1)
-    with col2:
-        new_status = st.selectbox("Nuevo estado", ESTADOS_INVENTARIO,
-                                   key="update_status")
-    with col3:
-        st.write("")  # spacer
-        st.write("")
-        if st.button("Actualizar"):
-            update_inventory_status(inv_id, new_status)
-            st.success(f"Registro {inv_id} actualizado a '{new_status}'")
-            st.rerun()
+                btn_col1, btn_col2 = st.columns([3, 1])
+                with btn_col1:
+                    save = st.form_submit_button("Guardar cambios", type="primary")
+                with btn_col2:
+                    remove = st.form_submit_button("Eliminar", type="secondary")
 
-    # --- Eliminar ---
-    with st.expander("Eliminar registro"):
-        del_id = st.number_input("ID a eliminar", min_value=1, step=1,
-                                  key="del_id")
-        if st.button("Eliminar", type="secondary"):
-            delete_inventory(del_id)
-            st.warning(f"Registro {del_id} eliminado")
-            st.rerun()
+                if save:
+                    update_inventory(
+                        inventory_id=item_id,
+                        date=str(edit_date),
+                        tonnes=edit_tonnes,
+                        price_cop_kg=edit_price,
+                        supplier=edit_supplier or None,
+                        region=edit_region or None,
+                        status=edit_status,
+                        shipment_date=str(edit_shipment) if edit_shipment else None,
+                        notes=edit_notes or None,
+                    )
+                    st.success(f"Registro #{item_id} actualizado")
+                    st.rerun()
+
+                if remove:
+                    delete_inventory(item_id)
+                    st.warning(f"Registro #{item_id} eliminado")
+                    st.rerun()
