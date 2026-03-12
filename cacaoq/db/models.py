@@ -74,6 +74,67 @@ def delete_inventory(inventory_id: int):
     conn.close()
 
 
+# ─── Local Sales ─────────────────────────────────────────────────────
+
+def insert_local_sale(date: str, tonnes: float, price_cop_kg: float,
+                      inventory_id: int = None, buyer: str = None,
+                      notes: str = None) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO local_sales (date, inventory_id, tonnes, price_cop_kg, buyer, notes)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (date, inventory_id, tonnes, price_cop_kg, buyer, notes)
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id
+
+
+def get_all_local_sales():
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM local_sales ORDER BY date DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_total_sold_tonnes() -> float:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COALESCE(SUM(tonnes), 0) as total FROM local_sales"
+    ).fetchone()
+    conn.close()
+    return float(row["total"])
+
+
+def get_sales_summary() -> dict:
+    """Resumen de ventas locales: total toneladas, ingreso promedio, etc."""
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT
+            COALESCE(SUM(tonnes), 0) as total_tonnes,
+            COALESCE(SUM(tonnes * price_cop_kg * 1000), 0) as total_revenue_cop,
+            COUNT(*) as num_sales
+           FROM local_sales"""
+    ).fetchone()
+    conn.close()
+    result = dict(row)
+    if result["total_tonnes"] > 0:
+        result["avg_price_cop_kg"] = result["total_revenue_cop"] / (result["total_tonnes"] * 1000)
+    else:
+        result["avg_price_cop_kg"] = 0
+    return result
+
+
+def delete_local_sale(sale_id: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM local_sales WHERE id=?", (sale_id,))
+    conn.commit()
+    conn.close()
+
+
 # ─── Broker Positions ─────────────────────────────────────────────────
 
 def insert_position(statement_date: str, account: str, trade_date: str = None,

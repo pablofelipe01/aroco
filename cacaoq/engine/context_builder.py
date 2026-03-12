@@ -28,7 +28,10 @@ def build_system_prompt() -> str:
 
     # --- Inventario físico ---
     inv_section = "## Inventario Físico\n"
-    inv_section += f"- Total: **{phys['total_tonnes']:.1f} toneladas**\n"
+    inv_section += f"- Total comprado: **{phys.get('total_purchased', phys['total_tonnes']):.1f} toneladas**\n"
+    if phys.get("sold_locally", 0) > 0:
+        inv_section += f"- Vendido localmente: **{phys['sold_locally']:.1f} toneladas** (precio prom: COP {phys.get('avg_sale_price_cop_kg', 0):,.0f}/kg)\n"
+    inv_section += f"- **Exposición neta: {phys['total_tonnes']:.1f} toneladas** (lo que necesita cobertura)\n"
     for status, tonnes in phys["by_status"].items():
         inv_section += f"  - {status.capitalize()}: {tonnes:.1f} ton\n"
     if phys["avg_purchase_price_cop_kg"] > 0:

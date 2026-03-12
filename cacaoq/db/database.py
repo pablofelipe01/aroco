@@ -133,6 +133,19 @@ def init_db():
         created_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Ventas locales de cacao físico
+    CREATE TABLE IF NOT EXISTS local_sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        inventory_id INTEGER,
+        tonnes REAL NOT NULL,
+        price_cop_kg REAL NOT NULL,
+        buyer TEXT,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (inventory_id) REFERENCES physical_inventory(id)
+    );
+
     -- Tablero de opciones diario del broker
     CREATE TABLE IF NOT EXISTS options_board (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
