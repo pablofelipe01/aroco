@@ -5,7 +5,7 @@ import streamlit as st
 from anthropic import Anthropic
 from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, CLAUDE_MAX_TOKENS
 from engine.context_builder import build_system_prompt, build_morning_analysis_prompt
-from db.models import insert_chat_message, get_chat_history
+from db.models import insert_chat_message, get_chat_history, get_all_sessions
 
 
 def _get_client() -> Anthropic | None:
@@ -18,7 +18,12 @@ def _get_client() -> Anthropic | None:
 def _ensure_session():
     """Inicializa el session state para el chat."""
     if "chat_session_id" not in st.session_state:
-        st.session_state.chat_session_id = str(uuid.uuid4())[:8]
+        # Retomar la última sesión si existe, si no crear una nueva
+        sessions = get_all_sessions()
+        if sessions:
+            st.session_state.chat_session_id = sessions[0]["session_id"]
+        else:
+            st.session_state.chat_session_id = str(uuid.uuid4())[:8]
     if "messages" not in st.session_state:
         # Cargar historial existente
         history = get_chat_history(st.session_state.chat_session_id)
@@ -54,6 +59,18 @@ def render_chat():
             st.session_state.chat_session_id = str(uuid.uuid4())[:8]
             st.session_state.messages = []
             st.rerun()
+    with col3:
+        sessions = get_all_sessions()
+        if len(sessions) > 1:
+            options = {f"{s['session_id']} ({s['started'][:10]}, {s['messages']} msgs)": s["session_id"] for s in sessions}
+            selected = st.selectbox("Historial", options.keys(), label_visibility="collapsed")
+            if options[selected] != st.session_state.chat_session_id:
+                st.session_state.chat_session_id = options[selected]
+                history = get_chat_history(options[selected])
+                st.session_state.messages = [
+                    {"role": m["role"], "content": m["content"]} for m in history
+                ]
+                st.rerun()
 
     st.divider()
 
