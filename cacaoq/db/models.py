@@ -325,3 +325,67 @@ def get_latest_pnl():
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+# ─── Options Board ──────────────────────────────────────────────────
+
+def upsert_options_board(date: str, contract_month: str, underlying_price: float,
+                         dte: int, expiration: str, volatility_calls: float,
+                         volatility_puts: float, interest_rate: float,
+                         strikes: list[dict]) -> int:
+    """Guarda un tablero de opciones completo (metadata + cadena de strikes)."""
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO options_board
+           (date, contract_month, underlying_price, dte, expiration,
+            volatility_calls, volatility_puts, interest_rate)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(date, contract_month) DO UPDATE SET
+             underlying_price=excluded.underlying_price, dte=excluded.dte,
+             expiration=excluded.expiration, volatility_calls=excluded.volatility_calls,
+             volatility_puts=excluded.volatility_puts, interest_rate=excluded.interest_rate""",
+        (date, contract_month, underlying_price, dte, expiration,
+         volatility_calls, volatility_puts, interest_rate)
+    )
+    # Obtener board_id
+    row = conn.execute(
+        "SELECT id FROM options_board WHERE date=? AND contract_month=?",
+        (date, contract_month)
+    ).fetchone()
+    board_id = row["id"]
+
+    # Insertar/actualizar strikes
+    for s in strikes:
+        conn.execute(
+            """INSERT INTO options_chain
+               (board_id, strike, call_premium, call_delta, put_premium, put_delta)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(board_id, strike) DO UPDATE SET
+                 call_premium=excluded.call_premium, call_delta=excluded.call_delta,
+                 put_premium=excluded.put_premium, put_delta=excluded.put_delta""",
+            (board_id, s["strike"], s.get("call_premium"), s.get("call_delta"),
+             s.get("put_premium"), s.get("put_delta"))
+        )
+
+    conn.commit()
+    conn.close()
+    return board_id
+
+
+def get_latest_options_board() -> dict | None:
+    """Retorna el tablero de opciones más reciente con toda la cadena."""
+    conn = get_connection()
+    board = conn.execute(
+        "SELECT * FROM options_board ORDER BY date DESC LIMIT 1"
+    ).fetchone()
+    if not board:
+        conn.close()
+        return None
+    board = dict(board)
+    strikes = conn.execute(
+        "SELECT * FROM options_chain WHERE board_id=? ORDER BY strike",
+        (board["id"],)
+    ).fetchall()
+    conn.close()
+    board["strikes"] = [dict(s) for s in strikes]
+    return board

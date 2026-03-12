@@ -15,6 +15,7 @@ from ui.sidebar import render_sidebar
 from ui.chat import render_chat
 from ui.inventory import render_inventory
 from ui.statement_view import render_statement_view
+from ui.options_upload import render_options_upload
 
 # --- Configuración de página ---
 st.set_page_config(
@@ -45,6 +46,9 @@ if page == "Chat":
 
 elif page == "Inventario":
     render_inventory()
+
+elif page == "Opciones":
+    render_options_upload()
 
 elif page == "Statements":
     render_statement_view()

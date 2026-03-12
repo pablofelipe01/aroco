@@ -1,6 +1,7 @@
 """CacaoQ — Construye el system prompt dinámico para Claude."""
 
 from engine.risk import compute_risk
+from db.models import get_latest_options_board
 
 
 def build_system_prompt() -> str:
@@ -100,6 +101,31 @@ def build_system_prompt() -> str:
     margin_section += f"- Contratos adicionales posibles: {margin['additional_contracts_possible']}\n"
     margin_section += f"- Toneladas adicionales cubribles: {margin['additional_tonnes_possible']}\n"
 
+    # --- Tablero de opciones ---
+    options_section = ""
+    board = get_latest_options_board()
+    if board:
+        options_section = f"## Tablero de Opciones Disponibles ({board['date']})\n"
+        options_section += f"- Contrato: **{board['contract_month']}**\n"
+        options_section += f"- Precio subyacente: **USD {board['underlying_price']:,.0f}**\n"
+        options_section += f"- DTE: **{board['dte']} días** (Exp: {board['expiration']})\n"
+        options_section += f"- Volatilidad implícita: Calls {board['volatility_calls']:.1f}% / Puts {board['volatility_puts']:.1f}%\n"
+        options_section += f"- Tasa: {board['interest_rate']:.2f}%\n\n"
+        options_section += "| Strike | Call Prima | Call Delta | Put Prima | Put Delta |\n"
+        options_section += "|--------|-----------|-----------|----------|----------|\n"
+        # Filtrar strikes relevantes (cerca del underlying ±30%)
+        underlying = board["underlying_price"]
+        low_bound = underlying * 0.70
+        high_bound = underlying * 1.30
+        for s in board["strikes"]:
+            if low_bound <= s["strike"] <= high_bound:
+                options_section += (
+                    f"| {s['strike']:,.0f} | {s['call_premium']:,.0f} | "
+                    f"{s['call_delta']:.2f} | {s['put_premium']:,.0f} | "
+                    f"{s['put_delta']:.2f} |\n"
+                )
+        options_section += "\n*Solo se muestran strikes ±30% del precio actual. Hay datos para todo el rango.*\n"
+
     # --- System prompt completo ---
     system_prompt = f"""Eres el analista de riesgo de AROCO SAS, un exportador colombiano de cacao fino de aroma. Tu nombre es CacaoQ.
 
@@ -123,8 +149,11 @@ def build_system_prompt() -> str:
 {pnl_section}
 {scenario_section}
 {margin_section}
+{options_section}
 
 ## Notas importantes
+- Cuando el usuario pregunte sobre estrategias de cobertura, usa el tablero de opciones disponibles para recomendar strikes específicos con sus primas y deltas reales
+- Para collars: recomienda combinaciones PUT comprado + CALL vendido mostrando costo neto, rango de protección y break-even
 - El collar (PUT comprado + CALL vendido) protege contra caídas pero limita ganancias
 - La TRM afecta directamente el margen de exportación
 - El inventario físico no cubierto está expuesto al riesgo de precio

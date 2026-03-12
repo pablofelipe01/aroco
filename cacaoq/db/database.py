@@ -133,6 +133,34 @@ def init_db():
         created_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Tablero de opciones diario del broker
+    CREATE TABLE IF NOT EXISTS options_board (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        contract_month TEXT NOT NULL,
+        underlying_price REAL,
+        dte INTEGER,
+        expiration TEXT,
+        volatility_calls REAL,
+        volatility_puts REAL,
+        interest_rate REAL,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(date, contract_month)
+    );
+
+    CREATE TABLE IF NOT EXISTS options_chain (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        board_id INTEGER NOT NULL,
+        strike REAL NOT NULL,
+        call_premium REAL,
+        call_delta REAL,
+        put_premium REAL,
+        put_delta REAL,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (board_id) REFERENCES options_board(id),
+        UNIQUE(board_id, strike)
+    );
+
     -- P&L del broker
     CREATE TABLE IF NOT EXISTS broker_pnl (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
