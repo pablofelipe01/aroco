@@ -62,15 +62,23 @@ def render_chat():
     with col3:
         sessions = get_all_sessions()
         if len(sessions) > 1:
+            session_ids = [s["session_id"] for s in sessions]
             options = {f"{s['session_id']} ({s['started'][:10]}, {s['messages']} msgs)": s["session_id"] for s in sessions}
-            selected = st.selectbox("Historial", options.keys(), label_visibility="collapsed")
-            if options[selected] != st.session_state.chat_session_id:
-                st.session_state.chat_session_id = options[selected]
-                history = get_chat_history(options[selected])
-                st.session_state.messages = [
-                    {"role": m["role"], "content": m["content"]} for m in history
-                ]
-                st.rerun()
+            # Solo mostrar selectbox si la sesión actual está en el historial
+            current_in_history = st.session_state.chat_session_id in session_ids
+            if current_in_history:
+                current_idx = session_ids.index(st.session_state.chat_session_id)
+                selected = st.selectbox("Historial", list(options.keys()), index=current_idx, label_visibility="collapsed")
+                if options[selected] != st.session_state.chat_session_id:
+                    st.session_state.chat_session_id = options[selected]
+                    history = get_chat_history(options[selected])
+                    st.session_state.messages = [
+                        {"role": m["role"], "content": m["content"]} for m in history
+                    ]
+                    st.rerun()
+            else:
+                # Sesión nueva sin mensajes: mostrar placeholder
+                st.selectbox("Historial", ["Nueva conversación"], disabled=True, label_visibility="collapsed")
 
     st.divider()
 
