@@ -6,17 +6,30 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _get_secret(key: str, default: str = "") -> str:
+    """Lee un secret de os.environ (.env local) o st.secrets (Streamlit Cloud)."""
+    val = os.getenv(key, "")
+    if val:
+        return val
+    try:
+        import streamlit as st
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
+
 # --- Rutas ---
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "data_db" / "cacaoq.db"
 STATEMENTS_DIR = BASE_DIR / "statements"
 
 # --- API Keys ---
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_API_KEY = _get_secret("ANTHROPIC_API_KEY")
 
 # --- Turso (SQLite remoto) ---
-TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
-TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
+TURSO_DATABASE_URL = _get_secret("TURSO_DATABASE_URL")
+TURSO_AUTH_TOKEN = _get_secret("TURSO_AUTH_TOKEN")
 
 # --- Modelo Claude ---
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
