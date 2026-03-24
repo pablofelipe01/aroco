@@ -14,6 +14,10 @@ STATEMENTS_DIR = BASE_DIR / "statements"
 # --- API Keys ---
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# --- Turso (SQLite remoto) ---
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
+
 # --- Modelo Claude ---
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 CLAUDE_MAX_TOKENS = 4096

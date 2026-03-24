@@ -1,15 +1,29 @@
-"""CacaoQ — Inicialización y conexión a SQLite."""
+"""CacaoQ — Inicialización y conexión a SQLite (local o Turso remoto)."""
 
 import sqlite3
-from config import DB_PATH
+from config import DB_PATH, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
 
 
-def get_connection() -> sqlite3.Connection:
-    """Retorna conexión a la base de datos con row_factory."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+def get_connection():
+    """Retorna conexión a la base de datos con row_factory.
+
+    Si TURSO_DATABASE_URL está configurado, conecta a Turso (libsql remoto).
+    Si no, usa SQLite local como fallback para desarrollo.
+    """
+    if TURSO_DATABASE_URL:
+        import libsql_experimental as libsql
+        conn = libsql.connect(
+            "cacaoq.db",
+            sync_url=TURSO_DATABASE_URL,
+            auth_token=TURSO_AUTH_TOKEN,
+        )
+        conn.sync()
+    else:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute("PRAGMA journal_mode=WAL")
+
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -192,4 +206,4 @@ def init_db():
 
 if __name__ == "__main__":
     init_db()
-    print(f"Base de datos creada en {DB_PATH}")
+    print(f"Base de datos inicializada")
