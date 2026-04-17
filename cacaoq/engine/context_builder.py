@@ -55,12 +55,12 @@ def build_system_prompt() -> str:
     # --- Balance ---
     bal_section = "## Balance de la Cuenta\n"
     if balance:
-        bal_section += f"- Net Liquidating Value: **USD {balance.get('net_liquidating_value', 0):,.2f}**\n"
-        bal_section += f"- Total Equity: USD {balance.get('total_equity', 0):,.2f}\n"
-        bal_section += f"- Valor opciones neto: USD {balance.get('net_option_value', 0):,.2f}\n"
-        bal_section += f"- Margen inicial: USD {balance.get('initial_margin', 0):,.2f}\n"
-        bal_section += f"- Equity disponible: **USD {balance.get('excess_equity', 0):,.2f}**\n"
-        bal_section += f"- Varianza del mercado: USD {balance.get('market_variance', 0):,.2f}\n"
+        bal_section += f"- Net Liquidating Value: **USD {(balance.get('net_liquidating_value') or 0):,.2f}**\n"
+        bal_section += f"- Total Equity: USD {(balance.get('total_equity') or 0):,.2f}\n"
+        bal_section += f"- Valor opciones neto: USD {(balance.get('net_option_value') or 0):,.2f}\n"
+        bal_section += f"- Margen inicial: USD {(balance.get('initial_margin') or 0):,.2f}\n"
+        bal_section += f"- Equity disponible: **USD {(balance.get('excess_equity') or 0):,.2f}**\n"
+        bal_section += f"- Varianza del mercado: USD {(balance.get('market_variance') or 0):,.2f}\n"
     else:
         bal_section += "- Sin datos de balance\n"
 
