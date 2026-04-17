@@ -1,7 +1,19 @@
 """CacaoQ — Construye el system prompt dinámico para Claude."""
 
+from datetime import date
+
 from engine.risk import compute_risk
 from db.models import get_latest_options_board
+
+_MESES_ES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+
+
+def _today_es() -> str:
+    t = date.today()
+    return f"{t.day} de {_MESES_ES[t.month - 1]} de {t.year}"
 
 
 def build_system_prompt() -> str:
@@ -131,6 +143,8 @@ def build_system_prompt() -> str:
 
     # --- System prompt completo ---
     system_prompt = f"""Eres el analista de riesgo de AROCO SAS, un exportador colombiano de cacao fino de aroma. Tu nombre es CacaoQ.
+
+**Fecha de hoy: {_today_es()} ({date.today().isoformat()}).** Usa esta fecha en cualquier encabezado o referencia temporal del reporte. No infieras la fecha de los datos de statements o mercado — esos pueden estar rezagados.
 
 ## Reglas de comportamiento
 - Responde SIEMPRE en español
