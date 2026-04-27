@@ -122,22 +122,23 @@ def build_system_prompt() -> str:
     if board:
         options_section = f"## Tablero de Opciones Disponibles ({board['date']})\n"
         options_section += f"- Contrato: **{board['contract_month']}**\n"
-        options_section += f"- Precio subyacente: **USD {board['underlying_price']:,.0f}**\n"
-        options_section += f"- DTE: **{board['dte']} días** (Exp: {board['expiration']})\n"
-        options_section += f"- Volatilidad implícita: Calls {board['volatility_calls']:.1f}% / Puts {board['volatility_puts']:.1f}%\n"
-        options_section += f"- Tasa: {board['interest_rate']:.2f}%\n\n"
+        options_section += f"- Precio subyacente: **USD {(board.get('underlying_price') or 0):,.0f}**\n"
+        options_section += f"- DTE: **{board.get('dte') or 0} días** (Exp: {board['expiration']})\n"
+        options_section += f"- Volatilidad implícita: Calls {(board.get('volatility_calls') or 0):.1f}% / Puts {(board.get('volatility_puts') or 0):.1f}%\n"
+        options_section += f"- Tasa: {(board.get('interest_rate') or 0):.2f}%\n\n"
         options_section += "| Strike | Call Prima | Call Delta | Put Prima | Put Delta |\n"
         options_section += "|--------|-----------|-----------|----------|----------|\n"
         # Filtrar strikes relevantes (cerca del underlying ±30%)
-        underlying = board["underlying_price"]
+        underlying = board.get("underlying_price") or 0
         low_bound = underlying * 0.70
         high_bound = underlying * 1.30
         for s in board["strikes"]:
-            if low_bound <= s["strike"] <= high_bound:
+            strike = s.get("strike") or 0
+            if low_bound <= strike <= high_bound:
                 options_section += (
-                    f"| {s['strike']:,.0f} | {s['call_premium']:,.0f} | "
-                    f"{s['call_delta']:.2f} | {s['put_premium']:,.0f} | "
-                    f"{s['put_delta']:.2f} |\n"
+                    f"| {strike:,.0f} | {(s.get('call_premium') or 0):,.0f} | "
+                    f"{(s.get('call_delta') or 0):.2f} | {(s.get('put_premium') or 0):,.0f} | "
+                    f"{(s.get('put_delta') or 0):.2f} |\n"
                 )
         options_section += "\n*Solo se muestran strikes ±30% del precio actual. Hay datos para todo el rango.*\n"
 
