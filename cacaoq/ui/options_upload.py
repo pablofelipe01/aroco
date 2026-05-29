@@ -14,6 +14,15 @@ def _render_barchart_panel():
     """Panel de sincronización del tablero vía Barchart MCP."""
     st.subheader("Sincronización automática (Barchart MCP)")
 
+    # Mostrar success del sync anterior (sobrevive rerun)
+    last_result = st.session_state.pop("_barchart_sync_result", None)
+    if last_result and last_result.get("ok"):
+        st.success(
+            f"Tablero sincronizado: {last_result['contract_month']} | "
+            f"Underlying: USD {(last_result['underlying_price'] or 0):,.0f} | "
+            f"{last_result['strikes_count']} strikes | DTE: {last_result['dte']}"
+        )
+
     if not barchart_mcp.is_configured():
         st.info(
             "Barchart MCP no configurado. Agrega `BARCHART_MCP_URL` y "
@@ -82,19 +91,25 @@ def _render_barchart_panel():
             result = sync_options_board(symbol=symbol, expiration=expiration)
         if not result.get("ok"):
             st.error(f"Error: {result.get('error', 'desconocido')}")
-            if result.get("payload_top_keys"):
-                with st.expander("Debug — keys del payload Barchart"):
-                    st.write("Top-level keys:")
-                    st.code(", ".join(result["payload_top_keys"]))
-                    if result.get("payload_sample"):
-                        st.write("Muestra:")
-                        st.json(result["payload_sample"])
+            if result.get("diagnosis"):
+                st.info(result["diagnosis"])
+            with st.expander("Debug — payload Barchart", expanded=False):
+                cols = st.columns(2)
+                with cols[0]:
+                    st.write("**Top-level keys:**")
+                    st.code(", ".join(result.get("payload_top_keys") or []))
+                    st.write(f"**count:** `{result.get('payload_count')}`")
+                with cols[1]:
+                    st.write("**source_url:**")
+                    st.code(result.get("payload_source_url") or "(none)")
+                if result.get("payload_meta"):
+                    st.write("**meta:**")
+                    st.json(result["payload_meta"])
+                if result.get("payload_sample"):
+                    st.write("**Muestra de data:**")
+                    st.json(result["payload_sample"])
         else:
-            st.success(
-                f"Tablero sincronizado: {result['contract_month']} | "
-                f"Underlying: USD {(result['underlying_price'] or 0):,.0f} | "
-                f"{result['strikes_count']} strikes | DTE: {result['dte']}"
-            )
+            st.session_state["_barchart_sync_result"] = result
             st.rerun()
 
 

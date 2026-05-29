@@ -16,6 +16,29 @@ from engine.inventory_sync import sync_from_sheet
 
 def _render_sheet_sync_panel():
     """Panel de sincronización desde Google Sheet vía Inventory MCP."""
+    # Mostrar resultado de sync anterior (sobrevive a st.rerun)
+    last_result = st.session_state.pop("_inv_sync_result", None)
+    if last_result:
+        if last_result.get("ok"):
+            r = last_result
+            st.success(
+                f"Sincronizado: {r['inserted']} insertadas, "
+                f"{r['updated']} actualizadas, "
+                f"{r['skipped']} omitidas "
+                f"({r['rows_read']} filas leídas)"
+            )
+            if not r.get("price_column_detected"):
+                st.warning(
+                    f"No se detectó columna de precio. "
+                    f"{r.get('no_price_count', 0)} fila(s) con precio = 0."
+                )
+            if r.get("errors"):
+                st.warning("Errores parciales:")
+                for err in r["errors"]:
+                    st.text(f"  - {err}")
+        else:
+            st.error(f"Error: {last_result.get('error', 'desconocido')}")
+
     with st.expander("Sincronizar desde Google Sheet (Inventory MCP)", expanded=False):
         if not inventory_mcp.is_configured():
             st.info(
@@ -103,7 +126,14 @@ def _render_sheet_sync_panel():
                 st.error("Sync devolvió None (no debería pasar). Revisar logs.")
                 return
 
-            if not result.get("ok"):
+            # Guardar resultado en session_state para que sobreviva al rerun
+            # y los métricos arriba se actualicen con los nuevos datos.
+            st.session_state["_inv_sync_result"] = result
+            if result.get("ok"):
+                st.rerun()
+            else:
+                # En caso de error mantenemos el panel abierto sin rerun
+                # para que el usuario vea los headers y colmap detectados.
                 st.error(f"Error: {result.get('error', 'desconocido')}")
                 if result.get("headers_found"):
                     st.caption("Headers detectados:")
@@ -111,28 +141,6 @@ def _render_sheet_sync_panel():
                 if result.get("colmap"):
                     st.caption("Mapeo parcial:")
                     st.json(result["colmap"])
-            else:
-                st.success(
-                    f"Sincronizado: {result['inserted']} insertadas, "
-                    f"{result['updated']} actualizadas, "
-                    f"{result['skipped']} omitidas "
-                    f"({result['rows_read']} filas leídas)"
-                )
-                if not result.get("price_column_detected"):
-                    st.warning(
-                        f"No se detectó columna de precio en la sheet. "
-                        f"{result.get('no_price_count', 0)} fila(s) se importaron con "
-                        f"precio = 0 (revisar manualmente en la tabla de inventario)."
-                    )
-                if result.get("errors"):
-                    st.warning("Errores parciales:")
-                    for err in result["errors"]:
-                        st.text(f"  - {err}")
-                with st.expander("Mapeo de columnas detectado"):
-                    st.json(result["colmap"])
-                with st.expander("Resultado completo (debug)"):
-                    st.json(result)
-                st.rerun()
 
 
 def render_inventory():

@@ -161,22 +161,48 @@ def sync_options_board(symbol: str = BARCHART_COCOA_SYMBOL,
 
     by_strike = _normalize_chain(payload)
     if not by_strike:
-        # Diagnóstico: mostrar qué keys vino en el payload para poder
-        # extender _normalize_chain con el formato real del MCP.
+        # Diagnóstico ampliado para distinguir "shape desconocido" de
+        # "Barchart devolvió cadena vacía" (auth/symbol/mercado cerrado).
         top_keys = list(payload.keys()) if isinstance(payload, dict) else [type(payload).__name__]
         sample = None
-        # Si hay un campo que parece contener la cadena, sample del primer item
         for k in ("data", "results", "options", "optionPairs", "chain", "items"):
             if isinstance(payload, dict) and k in payload:
                 v = payload[k]
                 if isinstance(v, list) and v:
-                    sample = {"key": k, "first_item_keys": list(v[0].keys()) if isinstance(v[0], dict) else type(v[0]).__name__}
+                    sample = {
+                        "key": k,
+                        "length": len(v),
+                        "first_item_keys": list(v[0].keys()) if isinstance(v[0], dict) else type(v[0]).__name__,
+                    }
                     break
+
+        # Si los keys conocidos están todos vacíos, el problema está en Barchart
+        count = payload.get("count") if isinstance(payload, dict) else None
+        empty_data = (
+            isinstance(payload, dict)
+            and count == 0
+            and isinstance(payload.get("data"), list)
+            and len(payload["data"]) == 0
+        )
+        diagnosis = None
+        if empty_data:
+            diagnosis = (
+                "Barchart devolvió data:[] para este símbolo. Causas comunes: "
+                "(1) símbolo continuo CC*0 no tiene cadena — usa contrato concreto (CCN26, CCU26); "
+                "(2) sesión de Barchart vencida en el server — verifica con 'Probar sesión Barchart'; "
+                "(3) mercado cerrado o sin liquidez intradiaria; "
+                "(4) el símbolo no existe en la suscripción de AROCO."
+            )
+
         return {
             "ok": False,
             "error": "No se encontraron strikes en la cadena",
             "payload_top_keys": top_keys,
             "payload_sample": sample,
+            "payload_count": count,
+            "payload_meta": payload.get("meta") if isinstance(payload, dict) else None,
+            "payload_source_url": payload.get("source_url") if isinstance(payload, dict) else None,
+            "diagnosis": diagnosis,
         }
 
     call_ivs: list[float | None] = []
