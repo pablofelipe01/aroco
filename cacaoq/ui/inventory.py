@@ -25,7 +25,7 @@ def _render_sheet_sync_panel():
             )
             return
 
-        col1, col2, col3 = st.columns([2, 2, 1])
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
         with col1:
             worksheet = st.text_input(
                 "Hoja (worksheet)",
@@ -34,11 +34,17 @@ def _render_sheet_sync_panel():
             )
         with col2:
             header_row_raw = st.text_input(
-                "Fila de headers (opcional)",
+                "Fila headers",
                 value="",
-                help="Vacío = autodetectar. Útil si los headers están en fila 3+.",
+                help="Vacío = autodetectar.",
             )
         with col3:
+            limit_raw = st.text_input(
+                "Limit",
+                value="100",
+                help="Tope de filas a leer (evita timeouts en sheets grandes). Vacío = sin límite.",
+            )
+        with col4:
             st.write("")
             st.write("")
             sync_btn = st.button("Sincronizar", type="primary", use_container_width=True)
@@ -69,11 +75,34 @@ def _render_sheet_sync_panel():
                 except ValueError:
                     st.error("Fila de headers debe ser un número")
                     return
-            with st.spinner("Sincronizando inventario desde la Sheet..."):
-                result = sync_from_sheet(
-                    worksheet_name=worksheet or None,
-                    header_row=header_row,
-                )
+            limit = None
+            if limit_raw.strip():
+                try:
+                    limit = int(limit_raw.strip())
+                except ValueError:
+                    st.error("Limit debe ser un número o vacío")
+                    return
+
+            # Wrap everything: nunca quedarse sin mensaje
+            result = None
+            try:
+                with st.spinner("Sincronizando inventario desde la Sheet..."):
+                    result = sync_from_sheet(
+                        worksheet_name=worksheet or None,
+                        header_row=header_row,
+                        limit=limit,
+                    )
+            except Exception as e:
+                st.error(f"Excepción no capturada: {type(e).__name__}: {e}")
+                import traceback
+                with st.expander("Traceback"):
+                    st.code(traceback.format_exc())
+                return
+
+            if result is None:
+                st.error("Sync devolvió None (no debería pasar). Revisar logs.")
+                return
+
             if not result.get("ok"):
                 st.error(f"Error: {result.get('error', 'desconocido')}")
                 if result.get("headers_found"):
@@ -101,6 +130,8 @@ def _render_sheet_sync_panel():
                         st.text(f"  - {err}")
                 with st.expander("Mapeo de columnas detectado"):
                     st.json(result["colmap"])
+                with st.expander("Resultado completo (debug)"):
+                    st.json(result)
                 st.rerun()
 
 

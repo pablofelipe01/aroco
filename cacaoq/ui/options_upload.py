@@ -31,7 +31,11 @@ def _render_barchart_panel():
         symbol = st.text_input(
             "Símbolo Barchart",
             value=BARCHART_COCOA_SYMBOL,
-            help="CC*0 = cacao nearest. Ejemplos: CCK26 (May 26), CCN26 (Jul 26).",
+            help=(
+                "Usa un contrato CONCRETO (ej. CCN26, CCU26, CCZ26). "
+                "CC*0 (continuo) NO tiene cadena de opciones — solo precio de futuros. "
+                "Códigos de mes: H=Mar, K=May, N=Jul, U=Sep, Z=Dec."
+            ),
         )
     with col2:
         exps = st.session_state.barchart_expirations

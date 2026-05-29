@@ -162,7 +162,13 @@ def sync_latest_statement(date_str: str | None = None,
     if not raw_date or not raw_account:
         return {"ok": False, "error": "Payload sin fecha o cuenta", "payload": payload}
     statement_date = str(raw_date)[:10]  # YYYY-MM-DD aunque venga un datetime
-    account = str(raw_account)
+    # El MCP devuelve account como dict {name, number, salesman, address}.
+    # Extraer un identificador estable; fallback al account_id pasado.
+    if isinstance(raw_account, dict):
+        number = raw_account.get("number") or raw_account.get("id")
+        account = f"GMI-{number}" if number else account_id
+    else:
+        account = str(raw_account)
 
     if not force and _exists_for_date(account, statement_date):
         return {

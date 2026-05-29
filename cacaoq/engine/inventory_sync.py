@@ -164,8 +164,14 @@ def _normalize_row(row: dict, colmap: dict[str, str]) -> dict | None:
 
 
 def sync_from_sheet(worksheet_name: str | None = None,
-                    header_row: int | None = None) -> dict:
+                    header_row: int | None = None,
+                    limit: int | None = None) -> dict:
     """Lee la sheet del MCP y upsertea en physical_inventory.
+
+    Args:
+        worksheet_name: nombre de la hoja; None = default del MCP.
+        header_row: fila de headers; None = autodetectar.
+        limit: tope de filas a leer (None = todas). Útil para evitar timeouts.
 
     Returns dict con: ok, inserted, updated, skipped, errors[], colmap.
     """
@@ -173,7 +179,11 @@ def sync_from_sheet(worksheet_name: str | None = None,
         return {"ok": False, "error": "INVENTORY_MCP_URL no configurado"}
 
     try:
-        rows = mcp.read_inventory(worksheet_name=worksheet_name, header_row=header_row)
+        rows = mcp.read_inventory(
+            worksheet_name=worksheet_name,
+            header_row=header_row,
+            limit=limit,
+        )
     except Exception as e:
         return {"ok": False, "error": f"MCP error: {type(e).__name__}: {e}"}
 

@@ -50,8 +50,11 @@ INVENTORY_MCP_TOKEN = _get_secret("INVENTORY_MCP_TOKEN")
 INVENTORY_MCP_CF_CLIENT_ID = _get_secret("INVENTORY_MCP_CF_CLIENT_ID")
 INVENTORY_MCP_CF_CLIENT_SECRET = _get_secret("INVENTORY_MCP_CF_CLIENT_SECRET")
 
-# Símbolo Barchart por defecto para cacao (nearest)
-BARCHART_COCOA_SYMBOL = "CC*0"
+# Símbolo Barchart por defecto para cacao.
+# CC*0 (continuo) NO devuelve cadena de opciones en Barchart — solo precio de
+# futuros. Para opciones hay que usar un contrato concreto.
+# Códigos de mes: H=Mar, K=May, N=Jul, U=Sep, Z=Dec. Año = últimos 2 dígitos.
+BARCHART_COCOA_SYMBOL = _get_secret("BARCHART_COCOA_SYMBOL") or "CCN26"
 
 # --- Modelo Claude ---
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
