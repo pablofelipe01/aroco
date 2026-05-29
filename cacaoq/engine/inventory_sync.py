@@ -16,17 +16,29 @@ from db.models import upsert_inventory_by_external_id
 
 # Mapeo defensivo: campo interno → posibles nombres en el sheet (normalizados).
 _FIELD_HINTS = {
-    "date": ["fecha", "fechacompra", "fechadecompra", "date", "dia"],
-    "tonnes": ["toneladas", "ton", "tons", "tonelaje", "kg", "kilos", "cantidad", "qty"],
+    "date": [
+        "fecha", "fechacompra", "fechadecompra", "fechaentrada", "fechaingreso",
+        "fechaorden", "date", "dia",
+    ],
+    "tonnes": [
+        "toneladas", "ton", "tons", "tonelaje", "kg", "kilos", "cantidad",
+        "cantidadporllegar", "cantidadtotal", "cantidadnetta", "qty", "peso",
+    ],
     "price_cop_kg": [
         "preciocopkg", "preciokg", "preciocop", "preciopromedio",
-        "precio", "preciounitario", "valorkg", "cop",
+        "precio", "preciounitario", "valorkg", "valorunitario", "cop",
     ],
-    "supplier": ["proveedor", "supplier", "vendedor", "productor", "asociacion", "cooperativa"],
+    "supplier": [
+        "proveedor", "supplier", "vendedor", "productor", "asociacion",
+        "cooperativa", "procedencia",
+    ],
     "region": ["region", "departamento", "lugar", "zona", "origen"],
     "status": ["estado", "status", "fase", "etapa"],
-    "shipment_date": ["fechaembarque", "embarque", "fechashipment", "shipment", "fechaentrega"],
-    "notes": ["notas", "observaciones", "comentarios", "notes", "obs"],
+    "shipment_date": [
+        "fechaembarque", "embarque", "fechashipment", "shipment",
+        "fechaentrega", "fechallegada", "eta",
+    ],
+    "notes": ["notas", "observaciones", "comentarios", "notes", "obs", "licor"],
 }
 
 
@@ -118,7 +130,7 @@ def _row_external_id(worksheet: str, row_index: int) -> str:
 
 
 def _normalize_row(row: dict, colmap: dict[str, str]) -> dict | None:
-    """Convierte una fila del sheet al schema interno. None si faltan campos críticos."""
+    """Convierte una fila del sheet al schema interno. None si faltan date+tonnes."""
     def get(field: str) -> Any:
         col = colmap.get(field)
         return row.get(col) if col else None
@@ -127,8 +139,17 @@ def _normalize_row(row: dict, colmap: dict[str, str]) -> dict | None:
     tonnes = _coerce_float(get("tonnes"))
     price = _coerce_float(get("price_cop_kg"))
 
-    if not date_iso or tonnes is None or tonnes <= 0 or price is None or price <= 0:
+    # Solo date y tonnes son obligatorios. Si falta price, registramos 0
+    # y dejamos marca en notas para que el usuario lo complete después.
+    if not date_iso or tonnes is None or tonnes <= 0:
         return None
+
+    notes_raw = get("notes")
+    notes = str(notes_raw).strip() if notes_raw else None
+    if price is None or price <= 0:
+        price = 0.0
+        marker = "[sin precio en sheet]"
+        notes = f"{notes} {marker}".strip() if notes else marker
 
     return {
         "date": date_iso,
@@ -138,7 +159,7 @@ def _normalize_row(row: dict, colmap: dict[str, str]) -> dict | None:
         "region": (str(get("region")).strip() or None) if get("region") else None,
         "status": _coerce_status(get("status")),
         "shipment_date": _coerce_date(get("shipment_date")),
-        "notes": (str(get("notes")).strip() or None) if get("notes") else None,
+        "notes": notes,
     }
 
 
@@ -162,7 +183,7 @@ def sync_from_sheet(worksheet_name: str | None = None,
     headers = list(rows[0].keys())
     colmap = _build_column_map(headers)
 
-    required = ["date", "tonnes", "price_cop_kg"]
+    required = ["date", "tonnes"]
     missing = [f for f in required if f not in colmap]
     if missing:
         return {
@@ -174,6 +195,7 @@ def sync_from_sheet(worksheet_name: str | None = None,
 
     worksheet_label = worksheet_name or "default"
     inserted = updated = skipped = 0
+    no_price_count = 0
     errors: list[str] = []
 
     for idx, raw in enumerate(rows):
@@ -182,6 +204,8 @@ def sync_from_sheet(worksheet_name: str | None = None,
             if not norm:
                 skipped += 1
                 continue
+            if norm["price_cop_kg"] == 0.0:
+                no_price_count += 1
             ext_id = _row_external_id(worksheet_label, idx)
             _, was_insert = upsert_inventory_by_external_id(
                 external_id=ext_id,
@@ -201,6 +225,8 @@ def sync_from_sheet(worksheet_name: str | None = None,
         "inserted": inserted,
         "updated": updated,
         "skipped": skipped,
+        "no_price_count": no_price_count,
+        "price_column_detected": "price_cop_kg" in colmap,
         "errors": errors[:5],
         "colmap": colmap,
     }

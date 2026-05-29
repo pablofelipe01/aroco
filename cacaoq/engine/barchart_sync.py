@@ -161,7 +161,23 @@ def sync_options_board(symbol: str = BARCHART_COCOA_SYMBOL,
 
     by_strike = _normalize_chain(payload)
     if not by_strike:
-        return {"ok": False, "error": "No se encontraron strikes en la cadena"}
+        # Diagnóstico: mostrar qué keys vino en el payload para poder
+        # extender _normalize_chain con el formato real del MCP.
+        top_keys = list(payload.keys()) if isinstance(payload, dict) else [type(payload).__name__]
+        sample = None
+        # Si hay un campo que parece contener la cadena, sample del primer item
+        for k in ("data", "results", "options", "optionPairs", "chain", "items"):
+            if isinstance(payload, dict) and k in payload:
+                v = payload[k]
+                if isinstance(v, list) and v:
+                    sample = {"key": k, "first_item_keys": list(v[0].keys()) if isinstance(v[0], dict) else type(v[0]).__name__}
+                    break
+        return {
+            "ok": False,
+            "error": "No se encontraron strikes en la cadena",
+            "payload_top_keys": top_keys,
+            "payload_sample": sample,
+        }
 
     call_ivs: list[float | None] = []
     put_ivs: list[float | None] = []

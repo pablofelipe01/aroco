@@ -78,6 +78,13 @@ def _render_barchart_panel():
             result = sync_options_board(symbol=symbol, expiration=expiration)
         if not result.get("ok"):
             st.error(f"Error: {result.get('error', 'desconocido')}")
+            if result.get("payload_top_keys"):
+                with st.expander("Debug — keys del payload Barchart"):
+                    st.write("Top-level keys:")
+                    st.code(", ".join(result["payload_top_keys"]))
+                    if result.get("payload_sample"):
+                        st.write("Muestra:")
+                        st.json(result["payload_sample"])
         else:
             st.success(
                 f"Tablero sincronizado: {result['contract_month']} | "

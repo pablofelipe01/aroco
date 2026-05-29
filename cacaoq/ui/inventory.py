@@ -89,6 +89,12 @@ def _render_sheet_sync_panel():
                     f"{result['skipped']} omitidas "
                     f"({result['rows_read']} filas leídas)"
                 )
+                if not result.get("price_column_detected"):
+                    st.warning(
+                        f"No se detectó columna de precio en la sheet. "
+                        f"{result.get('no_price_count', 0)} fila(s) se importaron con "
+                        f"precio = 0 (revisar manualmente en la tabla de inventario)."
+                    )
                 if result.get("errors"):
                     st.warning("Errores parciales:")
                     for err in result["errors"]:

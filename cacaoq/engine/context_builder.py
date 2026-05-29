@@ -16,14 +16,23 @@ def _today_es() -> str:
     return f"{t.day} de {_MESES_ES[t.month - 1]} de {t.year}"
 
 
-def _format_intel_section(intel_articles: list[dict] | None) -> str:
-    """Formatea los artículos de Cocoa Market Intelligence (StoneX)."""
+def _format_intel_section(intel_articles: list | None) -> str:
+    """Formatea los artículos de Cocoa Market Intelligence (StoneX).
+
+    Tolera items que vengan como str (los inserta como texto) o como dict.
+    Cualquier otro tipo se ignora.
+    """
     if not intel_articles:
         return ""
     section = "## Inteligencia de Mercado (StoneX Cocoa)\n"
     section += "Estos son los artículos más recientes del equipo de research de StoneX. " \
                "Úsalos como contexto cualitativo para tu análisis (no son consejo).\n\n"
     for art in intel_articles:
+        if isinstance(art, str):
+            section += art.strip() + "\n\n"
+            continue
+        if not isinstance(art, dict):
+            continue
         title = art.get("title") or art.get("headline") or "(sin título)"
         published = art.get("published_at") or art.get("date") or art.get("publishDate") or ""
         author = art.get("author") or ""
@@ -34,7 +43,6 @@ def _format_intel_section(intel_articles: list[dict] | None) -> str:
         if meta_bits:
             section += f"*{' · '.join(meta_bits)}*\n\n"
         body = (content or abstract).strip()
-        # truncar para no inflar el prompt
         if len(body) > 1200:
             body = body[:1200].rsplit(" ", 1)[0] + "..."
         if body:

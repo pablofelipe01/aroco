@@ -30,7 +30,7 @@ def _exists_for_date(account: str, statement_date: str) -> bool:
     conn = get_connection()
     row = conn.execute(
         "SELECT id FROM processed_statements WHERE statement_date=? AND account=? LIMIT 1",
-        (statement_date, account),
+        (str(statement_date), str(account)),
     ).fetchone()
     conn.close()
     return row is not None
@@ -58,20 +58,27 @@ def _coerce_int(v: Any) -> int:
         return 0
 
 
+def _safe_str(v: Any) -> str | None:
+    """Convierte a str (str() del valor) o None. Evita pasar datetime/memoryview a libsql."""
+    if v is None or v == "":
+        return None
+    return str(v)
+
+
 def _normalize_position(p: dict) -> dict:
     """Acepta nombres alternos del payload MCP y los normaliza al schema interno."""
     return {
-        "trade_date": p.get("trade_date") or p.get("tradeDate"),
+        "trade_date": _safe_str(p.get("trade_date") or p.get("tradeDate")),
         "card": str(p.get("card") or ""),
         "long_qty": _coerce_int(p.get("long_qty") or p.get("longQty") or p.get("long")),
         "short_qty": _coerce_int(p.get("short_qty") or p.get("shortQty") or p.get("short")),
-        "option_type": p.get("option_type") or p.get("optionType") or p.get("type"),
-        "contract_month": p.get("contract_month") or p.get("contractMonth") or p.get("month"),
-        "exchange": p.get("exchange") or "ICE COCOA",
+        "option_type": _safe_str(p.get("option_type") or p.get("optionType") or p.get("type")),
+        "contract_month": _safe_str(p.get("contract_month") or p.get("contractMonth") or p.get("month")),
+        "exchange": str(p.get("exchange") or "ICE COCOA"),
         "strike": _coerce_float(p.get("strike")),
         "settle_price": _coerce_float(p.get("settle_price") or p.get("settlePrice") or p.get("settle")),
         "market_value": _coerce_float(p.get("market_value") or p.get("marketValue") or p.get("value")) or 0.0,
-        "dr_cr": p.get("dr_cr") or p.get("drCr") or ("DR" if (p.get("market_value") or 0) < 0 else "CR"),
+        "dr_cr": _safe_str(p.get("dr_cr") or p.get("drCr")) or ("DR" if (_coerce_float(p.get("market_value")) or 0) < 0 else "CR"),
     }
 
 
@@ -149,12 +156,13 @@ def sync_latest_statement(date_str: str | None = None,
     if not payload:
         return {"ok": False, "error": "MCP devolvió respuesta vacía"}
 
-    statement_date = (
-        payload.get("date") or payload.get("statement_date") or date_str
-    )
-    account = payload.get("account") or payload.get("account_id") or account_id
-    if not statement_date or not account:
+    # Coerce a str — libsql_client no acepta datetime.date u otros tipos exóticos
+    raw_date = payload.get("date") or payload.get("statement_date") or date_str
+    raw_account = payload.get("account") or payload.get("account_id") or account_id
+    if not raw_date or not raw_account:
         return {"ok": False, "error": "Payload sin fecha o cuenta", "payload": payload}
+    statement_date = str(raw_date)[:10]  # YYYY-MM-DD aunque venga un datetime
+    account = str(raw_account)
 
     if not force and _exists_for_date(account, statement_date):
         return {
