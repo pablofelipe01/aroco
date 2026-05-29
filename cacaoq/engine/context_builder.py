@@ -16,8 +16,39 @@ def _today_es() -> str:
     return f"{t.day} de {_MESES_ES[t.month - 1]} de {t.year}"
 
 
-def build_system_prompt() -> str:
-    """Construye el system prompt con todos los datos actuales."""
+def _format_intel_section(intel_articles: list[dict] | None) -> str:
+    """Formatea los artículos de Cocoa Market Intelligence (StoneX)."""
+    if not intel_articles:
+        return ""
+    section = "## Inteligencia de Mercado (StoneX Cocoa)\n"
+    section += "Estos son los artículos más recientes del equipo de research de StoneX. " \
+               "Úsalos como contexto cualitativo para tu análisis (no son consejo).\n\n"
+    for art in intel_articles:
+        title = art.get("title") or art.get("headline") or "(sin título)"
+        published = art.get("published_at") or art.get("date") or art.get("publishDate") or ""
+        author = art.get("author") or ""
+        abstract = art.get("abstract") or art.get("summary") or ""
+        content = art.get("content") or art.get("body") or ""
+        section += f"### {title}\n"
+        meta_bits = [b for b in [str(published)[:10], author] if b]
+        if meta_bits:
+            section += f"*{' · '.join(meta_bits)}*\n\n"
+        body = (content or abstract).strip()
+        # truncar para no inflar el prompt
+        if len(body) > 1200:
+            body = body[:1200].rsplit(" ", 1)[0] + "..."
+        if body:
+            section += body + "\n\n"
+    return section
+
+
+def build_system_prompt(intel_articles: list[dict] | None = None) -> str:
+    """Construye el system prompt con todos los datos actuales.
+
+    Args:
+        intel_articles: opcional, lista de artículos de Cocoa MI de StoneX.
+            Si se pasa, se incluyen como contexto cualitativo.
+    """
     risk = compute_risk()
     phys = risk["physical"]
     hedge = risk["hedge"]
@@ -142,6 +173,9 @@ def build_system_prompt() -> str:
                 )
         options_section += "\n*Solo se muestran strikes ±30% del precio actual. Hay datos para todo el rango.*\n"
 
+    # --- Inteligencia de mercado (opcional, viene del MCP StoneX) ---
+    intel_section = _format_intel_section(intel_articles)
+
     # --- System prompt completo ---
     system_prompt = f"""Eres el analista de riesgo de AROCO SAS, un exportador colombiano de cacao fino de aroma. Tu nombre es CacaoQ.
 
@@ -168,6 +202,7 @@ def build_system_prompt() -> str:
 {scenario_section}
 {margin_section}
 {options_section}
+{intel_section}
 
 ## Notas importantes
 - Cuando el usuario pregunte sobre estrategias de cobertura, usa el tablero de opciones disponibles para recomendar strikes específicos con sus primas y deltas reales

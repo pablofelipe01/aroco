@@ -1,22 +1,95 @@
 """CacaoQ — Vista de upload y parseo de statements StoneX."""
 
+from datetime import date, timedelta
+
 import streamlit as st
 import pandas as pd
 from pathlib import Path
 from config import STATEMENTS_DIR
 from parser.stonex_parser import parse_and_store
 from db.models import get_all_processed_statements, get_positions_by_date, get_latest_balance
+from mcp_client import stonex as stonex_mcp
+from engine.stonex_sync import sync_latest_statement
+
+
+def _render_mcp_panel():
+    """Panel de sincronización vía StoneX MCP."""
+    st.subheader("Sincronización automática (StoneX MCP)")
+
+    if not stonex_mcp.is_configured():
+        st.info(
+            "StoneX MCP no configurado. Agrega `STONEX_MCP_URL` y "
+            "`STONEX_MCP_TOKEN` (o credenciales CF Access) en los secrets "
+            "para activar la sincronización directa. Puedes seguir usando "
+            "el upload manual abajo."
+        )
+        return
+
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        target_date = st.date_input(
+            "Fecha del statement",
+            value=date.today() - timedelta(days=1),
+            help="Por defecto, ayer (último statement disponible).",
+        )
+    with col2:
+        force = st.checkbox(
+            "Forzar re-sync",
+            value=False,
+            help="Ignora dedup y vuelve a insertar (puede crear duplicados).",
+        )
+    with col3:
+        st.write("")  # spacer para alinear el botón
+        st.write("")
+        sync_btn = st.button("Sincronizar", type="primary", use_container_width=True)
+
+    health_col, _ = st.columns([1, 3])
+    with health_col:
+        if st.button("Probar conexión", use_container_width=True):
+            with st.spinner("Pinging MCP..."):
+                result = stonex_mcp.ping()
+            if result["ok"]:
+                st.success(f"MCP OK: {result['message']}")
+            else:
+                st.error(f"MCP error: {result['message']}")
+
+    if sync_btn:
+        with st.spinner(f"Sincronizando statement de {target_date}..."):
+            result = sync_latest_statement(
+                date_str=str(target_date),
+                force=force,
+            )
+        if not result.get("ok"):
+            st.error(f"Error: {result.get('error', 'desconocido')}")
+        elif result.get("already_processed"):
+            st.warning(
+                f"Ya existía un statement procesado para "
+                f"{result['date']} / {result['account']}. "
+                "Marca 'Forzar re-sync' si quieres reemplazarlo."
+            )
+        else:
+            st.success(
+                f"Statement sincronizado: {result['date']} | "
+                f"Cuenta: {result['account']} | "
+                f"Posiciones: {result['positions_count']}"
+            )
+            st.rerun()
 
 
 def render_statement_view():
     """Renderiza la página de statements."""
     st.header("Statements StoneX")
 
-    # --- Upload de PDF ---
+    _render_mcp_panel()
+
+    st.divider()
+
+    # --- Upload manual de PDF (fallback) ---
+    st.subheader("Upload manual de PDF (fallback)")
     uploaded = st.file_uploader(
         "Sube un Daily Statement de StoneX (PDF)",
         type=["pdf"],
-        help="Arrastra o selecciona el PDF del statement diario"
+        help="Usa esto si el MCP no está disponible o quieres procesar un archivo histórico."
     )
 
     if uploaded:

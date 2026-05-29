@@ -37,6 +37,17 @@ if "market_refreshed" not in st.session_state:
             pass
     st.session_state.market_refreshed = True
 
+# --- Auto-sync del último statement StoneX vía MCP (silencioso) ---
+if "stonex_synced" not in st.session_state:
+    try:
+        from mcp_client import stonex as _stonex_mcp
+        if _stonex_mcp.is_configured():
+            from engine.stonex_sync import sync_latest_statement
+            sync_latest_statement()  # ayer por defecto; dedup evita duplicados
+    except Exception:
+        pass
+    st.session_state.stonex_synced = True
+
 # --- Sidebar + navegación ---
 page = render_sidebar()
 

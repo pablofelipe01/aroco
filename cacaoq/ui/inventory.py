@@ -10,11 +10,99 @@ from db.models import (
     insert_local_sale, get_all_local_sales, get_sales_summary,
     get_total_sold_tonnes, delete_local_sale,
 )
+from mcp_client import inventory as inventory_mcp
+from engine.inventory_sync import sync_from_sheet
+
+
+def _render_sheet_sync_panel():
+    """Panel de sincronización desde Google Sheet vía Inventory MCP."""
+    with st.expander("Sincronizar desde Google Sheet (Inventory MCP)", expanded=False):
+        if not inventory_mcp.is_configured():
+            st.info(
+                "Inventory MCP no configurado. Agrega `INVENTORY_MCP_URL` y "
+                "credenciales en los secrets para activar la sincronización con "
+                "la Google Sheet."
+            )
+            return
+
+        col1, col2, col3 = st.columns([2, 2, 1])
+        with col1:
+            worksheet = st.text_input(
+                "Hoja (worksheet)",
+                value="",
+                help="Vacío = hoja por defecto del MCP (Inventario de disponobilidad).",
+            )
+        with col2:
+            header_row_raw = st.text_input(
+                "Fila de headers (opcional)",
+                value="",
+                help="Vacío = autodetectar. Útil si los headers están en fila 3+.",
+            )
+        with col3:
+            st.write("")
+            st.write("")
+            sync_btn = st.button("Sincronizar", type="primary", use_container_width=True)
+
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("Probar conexión", use_container_width=True):
+                with st.spinner("Pinging MCP..."):
+                    health = inventory_mcp.ping()
+                if health["ok"]:
+                    st.success(f"MCP OK: {health['message']}")
+                else:
+                    st.error(f"MCP error: {health['message']}")
+        with btn_col2:
+            if st.button("Ver hojas disponibles", use_container_width=True):
+                with st.spinner("Obteniendo info de la sheet..."):
+                    try:
+                        info = inventory_mcp.get_sheet_info()
+                        st.json(info)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        if sync_btn:
+            header_row = None
+            if header_row_raw.strip():
+                try:
+                    header_row = int(header_row_raw.strip())
+                except ValueError:
+                    st.error("Fila de headers debe ser un número")
+                    return
+            with st.spinner("Sincronizando inventario desde la Sheet..."):
+                result = sync_from_sheet(
+                    worksheet_name=worksheet or None,
+                    header_row=header_row,
+                )
+            if not result.get("ok"):
+                st.error(f"Error: {result.get('error', 'desconocido')}")
+                if result.get("headers_found"):
+                    st.caption("Headers detectados:")
+                    st.code(", ".join(result["headers_found"]))
+                if result.get("colmap"):
+                    st.caption("Mapeo parcial:")
+                    st.json(result["colmap"])
+            else:
+                st.success(
+                    f"Sincronizado: {result['inserted']} insertadas, "
+                    f"{result['updated']} actualizadas, "
+                    f"{result['skipped']} omitidas "
+                    f"({result['rows_read']} filas leídas)"
+                )
+                if result.get("errors"):
+                    st.warning("Errores parciales:")
+                    for err in result["errors"]:
+                        st.text(f"  - {err}")
+                with st.expander("Mapeo de columnas detectado"):
+                    st.json(result["colmap"])
+                st.rerun()
 
 
 def render_inventory():
     """Renderiza la página de inventario físico."""
     st.header("Inventario Físico de Cacao")
+
+    _render_sheet_sync_panel()
 
     # --- Métricas resumen ---
     inventory = get_active_inventory()

@@ -253,6 +253,18 @@ def init_db():
 
     for stmt in statements:
         conn.execute(stmt)
+
+    # --- Migraciones idempotentes (ADD COLUMN si no existe) ---
+    _migrations = [
+        "ALTER TABLE physical_inventory ADD COLUMN external_id TEXT",
+    ]
+    for mig in _migrations:
+        try:
+            conn.execute(mig)
+        except Exception:
+            # La columna ya existe — SQLite no soporta IF NOT EXISTS en ADD COLUMN
+            pass
+
     conn.commit()
     conn.close()
 

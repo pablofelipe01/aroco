@@ -41,6 +41,59 @@ def get_active_inventory():
     return [dict(r) for r in rows]
 
 
+def get_inventory_by_external_id(external_id: str) -> dict | None:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM physical_inventory WHERE external_id=?",
+        (external_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def upsert_inventory_by_external_id(external_id: str, date: str, tonnes: float,
+                                     price_cop_kg: float, supplier: str | None = None,
+                                     region: str | None = None, status: str = "bodega",
+                                     shipment_date: str | None = None,
+                                     notes: str | None = None) -> tuple[int, bool]:
+    """Inserta o actualiza una fila usando external_id como clave de dedup.
+
+    Returns:
+        (inventory_id, was_inserted) — was_inserted=True si fue INSERT, False si UPDATE.
+    """
+    from datetime import datetime
+    conn = get_connection()
+    existing = conn.execute(
+        "SELECT id FROM physical_inventory WHERE external_id=?",
+        (external_id,)
+    ).fetchone()
+    if existing:
+        row_id = existing["id"]
+        conn.execute(
+            """UPDATE physical_inventory SET
+               date=?, tonnes=?, price_cop_kg=?, supplier=?, region=?,
+               status=?, shipment_date=?, notes=?, updated_at=?
+               WHERE id=?""",
+            (date, tonnes, price_cop_kg, supplier, region, status,
+             shipment_date, notes, datetime.now().isoformat(), row_id)
+        )
+        conn.commit()
+        conn.close()
+        return row_id, False
+    cur = conn.execute(
+        """INSERT INTO physical_inventory
+           (date, tonnes, price_cop_kg, supplier, region, status,
+            shipment_date, notes, external_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (date, tonnes, price_cop_kg, supplier, region, status,
+         shipment_date, notes, external_id)
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    return row_id, True
+
+
 def update_inventory_status(inventory_id: int, status: str):
     conn = get_connection()
     conn.execute(

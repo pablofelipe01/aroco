@@ -1,11 +1,36 @@
 """CacaoQ — Interfaz de chat con Claude."""
 
+import time
 import uuid
 import streamlit as st
 from anthropic import Anthropic
 from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, CLAUDE_MAX_TOKENS
 from engine.context_builder import build_system_prompt, build_morning_analysis_prompt
 from db.models import insert_chat_message, get_chat_history, get_all_sessions
+from mcp_client import stonex as stonex_mcp
+
+
+_INTEL_TTL_SECONDS = 60 * 60  # 1h
+
+
+def _get_intel_articles() -> list[dict] | None:
+    """Retorna los últimos artículos de Cocoa MI, cacheados por sesión con TTL.
+
+    Falla silenciosamente si el MCP no está configurado o devuelve error;
+    el system prompt simplemente no incluirá la sección de inteligencia.
+    """
+    if not stonex_mcp.is_configured():
+        return None
+    cache = st.session_state.get("_intel_cache")
+    now = time.time()
+    if cache and (now - cache["ts"] < _INTEL_TTL_SECONDS):
+        return cache["data"]
+    try:
+        articles = stonex_mcp.get_latest_cocoa_intel(limit=3, only_primary=True)
+    except Exception:
+        articles = None
+    st.session_state._intel_cache = {"ts": now, "data": articles}
+    return articles
 
 
 def _get_client() -> Anthropic | None:
@@ -99,7 +124,8 @@ def render_chat():
 
     # --- Generar respuesta si el último mensaje es del usuario ---
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        system_prompt = build_system_prompt()
+        intel = _get_intel_articles()
+        system_prompt = build_system_prompt(intel_articles=intel)
 
         with st.chat_message("assistant"):
             with st.spinner("Analizando..."):

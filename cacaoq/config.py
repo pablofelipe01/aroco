@@ -31,6 +31,28 @@ ANTHROPIC_API_KEY = _get_secret("ANTHROPIC_API_KEY")
 TURSO_DATABASE_URL = _get_secret("TURSO_DATABASE_URL")
 TURSO_AUTH_TOKEN = _get_secret("TURSO_AUTH_TOKEN")
 
+# --- MCP servers (vía Cloudflare Tunnel) ---
+# StoneX (cuenta GMI-MICH5483 + Market Intelligence)
+STONEX_MCP_URL = _get_secret("STONEX_MCP_URL")
+STONEX_MCP_TOKEN = _get_secret("STONEX_MCP_TOKEN")
+STONEX_MCP_CF_CLIENT_ID = _get_secret("STONEX_MCP_CF_CLIENT_ID")
+STONEX_MCP_CF_CLIENT_SECRET = _get_secret("STONEX_MCP_CF_CLIENT_SECRET")
+
+# Barchart (cadena de opciones de futuros)
+BARCHART_MCP_URL = _get_secret("BARCHART_MCP_URL")
+BARCHART_MCP_TOKEN = _get_secret("BARCHART_MCP_TOKEN")
+BARCHART_MCP_CF_CLIENT_ID = _get_secret("BARCHART_MCP_CF_CLIENT_ID")
+BARCHART_MCP_CF_CLIENT_SECRET = _get_secret("BARCHART_MCP_CF_CLIENT_SECRET")
+
+# Inventory (Google Sheet de inventario físico)
+INVENTORY_MCP_URL = _get_secret("INVENTORY_MCP_URL")
+INVENTORY_MCP_TOKEN = _get_secret("INVENTORY_MCP_TOKEN")
+INVENTORY_MCP_CF_CLIENT_ID = _get_secret("INVENTORY_MCP_CF_CLIENT_ID")
+INVENTORY_MCP_CF_CLIENT_SECRET = _get_secret("INVENTORY_MCP_CF_CLIENT_SECRET")
+
+# Símbolo Barchart por defecto para cacao (nearest)
+BARCHART_COCOA_SYMBOL = "CC*0"
+
 # --- Modelo Claude ---
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 CLAUDE_MAX_TOKENS = 4096

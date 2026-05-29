@@ -2,17 +2,101 @@
 
 import streamlit as st
 from datetime import date
+from config import BARCHART_COCOA_SYMBOL
 from parser.options_board_parser import parse_options_board_image
 from db.models import upsert_options_board, get_latest_options_board
+from mcp_client import barchart as barchart_mcp
+from engine.barchart_sync import sync_options_board
 import pandas as pd
+
+
+def _render_barchart_panel():
+    """Panel de sincronización del tablero vía Barchart MCP."""
+    st.subheader("Sincronización automática (Barchart MCP)")
+
+    if not barchart_mcp.is_configured():
+        st.info(
+            "Barchart MCP no configurado. Agrega `BARCHART_MCP_URL` y "
+            "credenciales en los secrets para activar el pull directo del tablero. "
+            "Puedes seguir usando el upload manual abajo."
+        )
+        return
+
+    # Estado de sesión (caché en session_state para no spamear el MCP)
+    if "barchart_expirations" not in st.session_state:
+        st.session_state.barchart_expirations = []
+
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        symbol = st.text_input(
+            "Símbolo Barchart",
+            value=BARCHART_COCOA_SYMBOL,
+            help="CC*0 = cacao nearest. Ejemplos: CCK26 (May 26), CCN26 (Jul 26).",
+        )
+    with col2:
+        exps = st.session_state.barchart_expirations
+        if exps:
+            options = ["(default)"] + exps
+            sel = st.selectbox("Expiración", options, index=0)
+            expiration = "" if sel == "(default)" else sel
+        else:
+            expiration = st.text_input(
+                "Expiración (opcional)",
+                value="",
+                help="Formato YYYY-MM-DD o MM/DD/YY. Vacío = default del símbolo.",
+            )
+    with col3:
+        st.write("")
+        st.write("")
+        sync_btn = st.button("Sincronizar", type="primary", use_container_width=True)
+
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("Probar sesión Barchart", use_container_width=True):
+            with st.spinner("Verificando sesión..."):
+                health = barchart_mcp.ping_session()
+            if health["ok"]:
+                st.success(f"Sesión OK: {health['message']}")
+            else:
+                st.error(
+                    f"Sesión inválida: {health['message']}. "
+                    "Posiblemente venció — regenera storage_state.json en el server."
+                )
+    with btn_col2:
+        if st.button("Cargar expiraciones", use_container_width=True):
+            with st.spinner("Listando expiraciones..."):
+                try:
+                    exps = barchart_mcp.list_expirations(symbol=symbol)
+                    st.session_state.barchart_expirations = exps or []
+                    st.success(f"{len(exps or [])} expiraciones disponibles")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    if sync_btn:
+        with st.spinner(f"Trayendo cadena de {symbol}{' ' + expiration if expiration else ''}..."):
+            result = sync_options_board(symbol=symbol, expiration=expiration)
+        if not result.get("ok"):
+            st.error(f"Error: {result.get('error', 'desconocido')}")
+        else:
+            st.success(
+                f"Tablero sincronizado: {result['contract_month']} | "
+                f"Underlying: USD {(result['underlying_price'] or 0):,.0f} | "
+                f"{result['strikes_count']} strikes | DTE: {result['dte']}"
+            )
+            st.rerun()
 
 
 def render_options_upload():
     """Renderiza la página de carga del tablero de opciones."""
     st.header("Tablero de Opciones")
 
-    # --- Subir imagen ---
-    st.subheader("Cargar tablero del día")
+    _render_barchart_panel()
+
+    st.divider()
+
+    # --- Subir imagen (fallback manual) ---
+    st.subheader("Upload manual de screenshot (fallback)")
     uploaded = st.file_uploader(
         "Sube la captura del tablero de opciones del broker",
         type=["jpg", "jpeg", "png"],
