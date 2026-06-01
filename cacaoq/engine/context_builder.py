@@ -16,46 +16,12 @@ def _today_es() -> str:
     return f"{t.day} de {_MESES_ES[t.month - 1]} de {t.year}"
 
 
-def _format_intel_section(intel_articles: list | None) -> str:
-    """Formatea los artículos de Cocoa Market Intelligence (StoneX).
-
-    Tolera items que vengan como str (los inserta como texto) o como dict.
-    Cualquier otro tipo se ignora.
-    """
-    if not intel_articles:
-        return ""
-    section = "## Inteligencia de Mercado (StoneX Cocoa)\n"
-    section += "Estos son los artículos más recientes del equipo de research de StoneX. " \
-               "Úsalos como contexto cualitativo para tu análisis (no son consejo).\n\n"
-    for art in intel_articles:
-        if isinstance(art, str):
-            section += art.strip() + "\n\n"
-            continue
-        if not isinstance(art, dict):
-            continue
-        title = art.get("title") or art.get("headline") or "(sin título)"
-        published = art.get("published_at") or art.get("date") or art.get("publishDate") or ""
-        author = art.get("author") or ""
-        abstract = art.get("abstract") or art.get("summary") or ""
-        content = art.get("content") or art.get("body") or ""
-        section += f"### {title}\n"
-        meta_bits = [b for b in [str(published)[:10], author] if b]
-        if meta_bits:
-            section += f"*{' · '.join(meta_bits)}*\n\n"
-        body = (content or abstract).strip()
-        if len(body) > 1200:
-            body = body[:1200].rsplit(" ", 1)[0] + "..."
-        if body:
-            section += body + "\n\n"
-    return section
-
-
-def build_system_prompt(intel_articles: list[dict] | None = None) -> str:
+def build_system_prompt() -> str:
     """Construye el system prompt con todos los datos actuales.
 
-    Args:
-        intel_articles: opcional, lista de artículos de Cocoa MI de StoneX.
-            Si se pasa, se incluyen como contexto cualitativo.
+    El Market Intelligence de StoneX ya NO se pre-inyecta aquí; el modelo
+    tiene tools (list_intel_articles, get_intel_article, get_latest_cocoa_intel)
+    y decide en runtime qué consultar.
     """
     risk = compute_risk()
     phys = risk["physical"]
@@ -181,9 +147,6 @@ def build_system_prompt(intel_articles: list[dict] | None = None) -> str:
                 )
         options_section += "\n*Solo se muestran strikes ±30% del precio actual. Hay datos para todo el rango.*\n"
 
-    # --- Inteligencia de mercado (opcional, viene del MCP StoneX) ---
-    intel_section = _format_intel_section(intel_articles)
-
     # --- System prompt completo ---
     system_prompt = f"""Eres el analista de riesgo de AROCO SAS, un exportador colombiano de cacao fino de aroma. Tu nombre es CacaoQ.
 
@@ -210,7 +173,31 @@ def build_system_prompt(intel_articles: list[dict] | None = None) -> str:
 {scenario_section}
 {margin_section}
 {options_section}
-{intel_section}
+
+## Inteligencia de Mercado (StoneX MI) — bajo demanda vía tools
+
+Tienes acceso al feed completo de **StoneX Market Intelligence** (intel.stonex.com)
+a través de tres tools. NO confíes en tu conocimiento pre-entrenado sobre el
+mercado de cacao — consulta el MI cuando el usuario pregunte por:
+
+- Noticias, reportes o análisis recientes (supply/demand, weather, política
+  comercial, COT positioning, Costa de Marfil, Ghana, Indonesia, etc.)
+- Razones detrás del movimiento del precio
+- Outlook técnico o fundamental
+- Posicionamiento de fondos (managed money)
+- Cualquier evento de mercado que requiera contexto cualitativo
+
+Tools:
+- `list_intel_articles(market_id=16974, page_size=20, only_primary=False)` —
+  lista metadata (id, title, abstract, date) de artículos del mercado de cocoa.
+- `get_intel_article(article_id)` — contenido completo de un artículo por su UUID.
+- `get_latest_cocoa_intel(limit=3, only_primary=True)` — atajo: los N más
+  recientes de cocoa con contenido completo.
+
+**Estrategia recomendada**: primero `list_intel_articles` para descubrir títulos
+relevantes, luego `get_intel_article` para los 1-3 que parezcan más útiles a la
+pregunta. Para preguntas amplias "qué está pasando" puedes ir directo a
+`get_latest_cocoa_intel`. Cita los artículos por título y fecha cuando los uses.
 
 ## Notas importantes
 - Cuando el usuario pregunte sobre estrategias de cobertura, usa el tablero de opciones disponibles para recomendar strikes específicos con sus primas y deltas reales
