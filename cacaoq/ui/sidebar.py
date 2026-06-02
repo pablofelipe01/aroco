@@ -63,7 +63,7 @@ def render_sidebar() -> str:
         # --- Navegación ---
         page = st.radio(
             "Navegación",
-            ["Chat", "Inventario", "Opciones", "Statements", "Configuración"],
+            ["Chat", "Inventario", "Opciones", "Statements", "Reportes", "Configuración"],
             label_visibility="collapsed",
         )
 
